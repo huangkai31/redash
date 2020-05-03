@@ -16,9 +16,10 @@ EXPOSE 5000
 ARG skip_ds_deps
 
 RUN useradd --create-home redash
+COPY ./docker/sources.list /etc/apt/sources.list
 
 # Ubuntu packages
-RUN apt-get update && \
+RUN apt-get update && apt install -y apt-transport-https ca-certificates && \
   apt-get install -y \
     curl \
     gnupg \
@@ -49,7 +50,7 @@ RUN apt-get update && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
 
-ADD https://databricks.com/wp-content/uploads/2.6.10.1010-2/SimbaSparkODBC-2.6.10.1010-2-Debian-64bit.zip /tmp/simba_odbc.zip
+COPY ./docker/SimbaSparkODBC-2.6.10.1010-2-Debian-64bit.zip /tmp/simba_odbc.zip
 RUN unzip /tmp/simba_odbc.zip -d /tmp/ \
   && dpkg -i /tmp/SimbaSparkODBC-2.6.10.1010-2-Debian-64bit/simbaspark_2.6.10.1010-2_amd64.deb \
   && echo "[Simba]\nDriver = /opt/simba/spark/lib/64/libsparkodbc_sb64.so" >> /etc/odbcinst.ini \
@@ -65,8 +66,10 @@ ENV PIP_NO_CACHE_DIR=1
 # We first copy only the requirements file, to avoid rebuilding on every file
 # change.
 COPY requirements.txt requirements_bundles.txt requirements_dev.txt requirements_all_ds.txt ./
-RUN pip install -r requirements.txt -r requirements_dev.txt
-RUN if [ "x$skip_ds_deps" = "x" ] ; then pip install -r requirements_all_ds.txt ; else echo "Skipping pip install -r requirements_all_ds.txt" ; fi
+RUN pip install -i https://pypi.tuna.tsinghua.edu.cn/simple pip -U \
+  && pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install -r requirements.txt -r requirements_dev.txt --default-timeout=1000
+RUN if [ "x$skip_ds_deps" = "x" ] ; then pip install -r requirements_all_ds.txt --default-timeout=1000 ; else echo "Skipping pip install -r requirements_all_ds.txt" ; fi
 
 COPY . /app
 COPY --from=frontend-builder /frontend/client/dist /app/client/dist
